@@ -1,0 +1,27 @@
+{
+  "name": "fetch-to-graphql-ts-codegen",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "repository": "git@github.com:rgripper/fetch-to-graphql-ts-codegen.git",
+  "author": "Vladimir <azuresplash@gmail.com>",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node --project tsconfig.json src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^14.0.11",
+    "@types/node-fetch": "^2.5.7",
+    "@types/prettier": "^2.0.1",
+    "ts-node": "^8.10.2",
+    "typescript": "^3.9.5"
+  },
+  "dependencies": {
+    "@apollo/client": "^3.0.0-rc.2",
+    "graphql-tag": "^2.10.3",
+    "json-to-ts": "^1.7.0",
+    "node-fetch": "^2.6.0",
+    "prettier": "^2.0.5"
+  }
+}
