@@ -1,0 +1,6 @@
+[
+  "https://www.youtube.com/youtubei/v1/notification/get_unseen_count?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+  {
+    credentials: "include",
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:77.0]
