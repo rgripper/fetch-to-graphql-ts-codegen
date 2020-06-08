@@ -1,36 +1,65 @@
 import fetch, { Request } from "node-fetch";
-import jsonToTS from "json-to-ts";
+import { Type, discoverTypes, TypeMember } from "./typeHelpers";
+import { toUpperFirstChar } from "./helpers";
 
-export async function generateModule(request: Request): Promise<string> {
+type RequestInfo = { method: string; url: string; variablesTypes: Type[] | undefined; dataTypes: Type[] };
+
+function generateType(type: Type) {
+  return `
+  type ${type.name} = {
+${type.members.map((x) => `${x.name}: ${x.typeSyntax}`).join(";\n")}
+  }
+  `;
+}
+
+export async function createRequestInfo(queryName: string, request: Request): Promise<RequestInfo> {
   const response = await fetch(request);
-  const json = await response.json();
+  const data = await response.json();
+  const variables = request.body ? JSON.parse(((request.body as unknown) as Buffer).toString()) : undefined;
 
-  if (json !== undefined && typeof json !== "object") {
+  if (data !== undefined && typeof data !== "object") {
     throw new Error("Root primitive values are not supported");
   }
 
-  const queryName = "QueryName";
+  const variablesTypeName = `${queryName}Variables`;
+  const dataTypeName = `${queryName}Data`;
+
+  const variablesTypes = variables != undefined ? discoverTypes(variablesTypeName, variables) : undefined;
+  const dataTypes = discoverTypes(dataTypeName, data);
+
+  if (!dataTypes[0]) {
+    throw new Error("Query must return some value");
+  }
+
+  return {
+    url: request.url,
+    method: request.method,
+    variablesTypes,
+    dataTypes,
+  };
+}
+
+export async function generateModule(queryName: string, requestInfo: RequestInfo): Promise<string> {
   const constName = queryName
     .split(/(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])/)
     .map((x) => (x === undefined ? "_" : x.toUpperCase()))
     .join("");
 
-  const query = generateQuery(queryName, request, json);
+  const variablesTypesScript = requestInfo.variablesTypes?.map(generateType).join("\n") ?? "";
+  const dataTypesScript = requestInfo.dataTypes.map(generateType).join("\n") ?? "";
 
-  const variablesInterfaceName = `${queryName}Variables`;
-  const dataInterfaceName = `${queryName}Variables`;
+  const query = generateQuery(queryName, requestInfo);
 
-  const variablesInterfaces =
-    request.body != undefined ? jsonToTS(request.body, { rootName: variablesInterfaceName }) : undefined;
-  const dataInterfaces = json !== undefined ? jsonToTS(json, { rootName: dataInterfaceName }) : undefined;
+  const dataTypeName = queryName + "Data";
+  const variablesTypeName = queryName + "Variables";
 
   const fileContent = `
     import gql from 'graphql-tag';
     import { useQuery, QueryHookOptions, QueryResult } from '@apollo/client';
 
-    ${variablesInterfaces?.join("\n") ?? ""}
-    ${dataInterfaces?.join("\n") ?? ""}
-    type Use${queryName} = (options?: QueryHookOptions<${dataInterfaceName}, ${variablesInterfaceName}>) => QueryResult<${dataInterfaceName}, ${variablesInterfaceName}>
+    ${dataTypesScript}
+    ${variablesTypesScript}
+    type Use${queryName} = (options?: QueryHookOptions<${dataTypeName}, ${variablesTypeName}>) => QueryResult<${dataTypeName}, ${variablesTypeName}>
 
     export const ${constName} = gql${"`"}${query}${"`"};
 
@@ -40,45 +69,32 @@ export async function generateModule(request: Request): Promise<string> {
   return fileContent;
 }
 
-function toUpperFirstChar(input: string) {
-  return input[0].toUpperCase() + input.substr(1);
-}
-
-function generateFieldSelectors(obj: object) {
-  return Object.keys(obj).map((key): string => {
-    const value = (obj as any)[key];
-    if (typeof value === "object" && value !== null && Object.keys(value).length > 0) {
-      return `
-      ${key} @typeof(name: "${toUpperFirstChar(key)}") {
-          ${generateFieldSelectors(value)}
+function generateFieldSelectors(member: TypeMember): string {
+  if (member.complexType) {
+    return `
+      ${member.name} @typeof(name: "${member.complexType.name}") {
+          ${member.complexType.members.map(generateFieldSelectors)}
       }
   `;
-    } else {
-      return key;
-    }
-  });
+  } else {
+    return member.name;
+  }
 }
 
-function generateQuery(queryName: string, request: Request, json: unknown) {
-  const url = new URL(request.url);
+function generateQuery(queryName: string, requestInfo: RequestInfo) {
+  const url = new URL(requestInfo.url);
   const fragments = url.pathname.split("/");
   const name = fragments[fragments.length - 1];
-  const queryType = request.method == "GET" ? "query" : "mutation";
-  const [queryArgs, requestArgs] = request.body ? ["($input: any)", "(input: $input)"] : ["", ""];
+  const queryType = requestInfo.method == "GET" ? "query" : "mutation";
+  const [queryArgs, requestArgs] = requestInfo.variablesTypes ? ["($input: any)", "(input: $input)"] : ["", ""];
   const queryPath = url.pathname.substr(1) + url.search;
 
-  const returnSelector =
-    typeof json === "object" && json !== null
-      ? `{
-    ${generateFieldSelectors(json)}}
-`
-      : "";
-
+  const dataType = requestInfo.dataTypes[0];
   const query = `
   ${queryType} ${queryName}${queryArgs} {
       ${name}Result ${requestArgs}
-        @rest(type: "${toUpperFirstChar(name)}Result", path: "${queryPath}", method: "${request.method}") 
-        ${returnSelector}
+        @rest(type: "${toUpperFirstChar(name)}Result", path: "${queryPath}", method: "${requestInfo.method}") 
+        ${dataType.members.map(generateFieldSelectors).join("\n")}
   }`;
 
   return query;
