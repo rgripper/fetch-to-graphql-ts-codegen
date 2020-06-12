@@ -8,7 +8,8 @@
   "private": false,
   "scripts": {
     "build": "tsc",
-    "start": "ts-node --project tsconfig.json src/index.ts"
+    "start": "ts-node --project tsconfig.json src/index.ts ./sample/sample.ts ./sample/out.ts",
+    "demo": "yarn build && node dist/index.js ./sample/sample.ts ./sample/out.ts"
   },
   "devDependencies": {
     "@types/json5": "^0.0.30",

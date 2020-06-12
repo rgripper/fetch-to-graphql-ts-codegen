@@ -36,7 +36,6 @@ function getMember(name: string, obj: unknown, tryAddType: (type: Type) => boole
       type.name = typeName + attempts;
       attempts++;
     }
-    console.log(Array.isArray(obj) ? type.name + "[]" : type.name);
     return { name, typeSyntax: Array.isArray(obj) ? type.name + "[]" : type.name, complexType: type };
   } else {
     return { name, typeSyntax: typeName, complexType: undefined };
